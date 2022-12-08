@@ -1,13 +1,17 @@
 package verifyTests.assembly
 
+import chiselverify.assembly.RandomHelpers.BigRange
 import chiselverify.assembly.Label.LabelRecord
 import chiselverify.assembly.leros.{Leros, QuickAccessMemory}
-import chiselverify.assembly.rv32i.IntegerRegister
-import chiselverify.assembly.{Constant, IllegalRegisterInitializer, LabelReference, Register, Signed, Unsigned, WidthViolation, leros, rv32i}
+//import chiselverify.assembly.rv32i.IntegerRegister
+import chiselverify.assembly.{Constant, IllegalRegisterInitializer, LabelReference, Register, Signed, Unsigned, WidthViolation, leros}
 import org.scalatest.flatspec.AnyFlatSpec
+import chiselverify.assembly.Width
 
 class FieldsTest extends AnyFlatSpec {
   behavior of "Constant field"
+
+  implicit val context = chiselverify.assembly.GeneratorContext(Leros, Seq())
 
   it should "generate a random constant (unsigned)" in {
     val constant = Constant(Unsigned(8))(None)
@@ -39,6 +43,7 @@ class FieldsTest extends AnyFlatSpec {
     }
     assert(checker)
   }
+
   it should "not allow an out of bounds initializer (signed)" in {
     var checker = true
     try {
@@ -50,8 +55,12 @@ class FieldsTest extends AnyFlatSpec {
     assert(checker)
   }
 
-
   behavior of "Label reference field"
+
+  it should "generate a random label" in {
+    val lf = LabelReference(Unsigned(8))(None)
+    assert(BigRange(Unsigned(8)).contains(BigInt(lf)))
+  }
 
   it should "accept a label" in {
     val lf = LabelReference(Unsigned(8))(Some(LabelRecord("HelloWorld")))
@@ -69,7 +78,7 @@ class FieldsTest extends AnyFlatSpec {
     val reg = Register(QuickAccessMemory)(Some(QuickAccessMemory.registers(10)))
     assert(reg == 10)
   }
-
+/*
   it should "not allow an illegal initializer" in {
     var checker = true
     try {
@@ -80,6 +89,5 @@ class FieldsTest extends AnyFlatSpec {
     }
     assert(checker)
   }
-
-
+*/
 }

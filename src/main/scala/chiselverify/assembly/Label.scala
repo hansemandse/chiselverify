@@ -12,26 +12,25 @@ object Label {
 
   // auto generated label factory
   def apply(): InstructionFactory with Categorizable = {
-    Pattern(Category.Label)(implicit c => {
-      val lbl = s"RANDOM_LABEL_${c.labelCounter.inc()}"
-      c.jumpTargets.append(LabelRecord(lbl))
+    Pattern(Category.Label)(implicit context => {
+      val lbl = s"RANDOM_LABEL_${context.labelCounter.inc()}"
+      context.jumpTargets.append(LabelRecord(lbl))
       Seq(Label.create(lbl))
     })
   }
   // user defined labels factory
   def apply(lbl: String): Pattern = {
-    Pattern(implicit c => {
-      c.jumpTargets.append(LabelRecord(lbl))
+    Pattern(implicit context => {
+      context.jumpTargets.append(LabelRecord(lbl))
       Seq(Label.create(lbl))
     })
   }
 
   // create a anonymous instruction instance with the label name set as the assembly representation
-  private def create(id: String): Instruction = {
+  private def create(id: String)(implicit context: GeneratorContext): Instruction = {
     new Instruction(Category.Label) {
-      override def apply(): Instruction = Label.create(id)
+      override def apply()(implicit context: GeneratorContext): Instruction = Label.create(id)
       override def toAsm: String = s"$id:"
     }
   }
-
 }

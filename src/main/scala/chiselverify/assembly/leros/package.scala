@@ -6,56 +6,92 @@ import chiselverify.assembly.RandomHelpers.{BigRange, pow2, randSplit}
 package object leros {
 
   // leros uses the lower part of main memory as a register file
-  object QuickAccessMemory extends RegisterFile(
-    Seq.fill(256)(new Register {}): _*
-  )
-
+  object QuickAccessMemory extends RegisterFile(Seq.fill(256)(new Register {}): _*)
 
   object Leros extends InstructionSet {
+    import chiselverify.assembly.leros.Instructions._
+
+    // wrapper patterns to ensure proper simulation of generated programs
+    def simulationWrapper(body: InstructionFactory): Pattern = Pattern(implicit c => Seq(body, Scall(0)))
+    def simulationWrapper(n: Int): Pattern = Pattern(implicit c => Seq(Instruction.fill(n), Scall(0)))
+
+    // simple arithmetic instruction patterns
+    val add  = Pattern(Category.Arithmetic)(implicit context => Seq(Add()))
+    val addi = Pattern(Category.Arithmetic, Category.Immediate)(implicit context => Seq(Addi()))
+    val sub  = Pattern(Category.Arithmetic)(implicit context => Seq(Sub()))
+    val subi = Pattern(Category.Arithmetic, Category.Immediate)(implicit context => Seq(Subi()))
+    val shr  = Pattern(Category.Arithmetic)(implicit context => Seq(Shr()))
+
+    // simple logical instruction patterns
+    val and  = Pattern(Category.Logical)(implicit context => Seq(And()))
+    val andi = Pattern(Category.Logical, Category.Immediate)(implicit context => Seq(Andi()))
+    val or   = Pattern(Category.Logical)(implicit context => Seq(Or()))
+    val ori  = Pattern(Category.Logical, Category.Immediate)(implicit context => Seq(Ori()))
+    val xor  = Pattern(Category.Logical)(implicit context => Seq(Xor()))
+    val xori = Pattern(Category.Logical, Category.Immediate)(implicit context => Seq(Xori()))
+
+    // simple load instruction patterns
+    val loadLbl  = Pattern(Category.Load)(implicit context => Seq(LoadLbl()))
+    val loadhLbl = Pattern(Category.Load)(implicit context => Seq(LoadhLbl()))
+    val load     = Pattern(Category.Load)(implicit context => Seq(Load()))
+    val loadi    = Pattern(Category.Load, Category.Immediate)(implicit context => Seq(Loadi()))
+    val loadhi   = Pattern(Category.Load, Category.Immediate)(implicit context => Seq(Loadhi()))
+    val loadh2i  = Pattern(Category.Load, Category.Immediate)(implicit context => Seq(Loadh2i()))
+    val loadh3i  = Pattern(Category.Load, Category.Immediate)(implicit context => Seq(Loadh3i()))
+    val ldaddr   = Pattern(Category.Load)(implicit context => Seq(Ldaddr()))
+    val ldind    = Pattern(Category.Load, Category.Immediate)(implicit context => Seq(Ldind()))
+    val lindbu   = Pattern(Category.Load, Category.Immediate)(implicit context => Seq(Ldindbu()))
+
+    // simple store instruction patterns
+    val store  = Pattern(Category.Store)(implicit context => Seq(Store()))
+    val stind  = Pattern(Category.Store, Category.Immediate)(implicit context => Seq(Stind()))
+    val stindb = Pattern(Category.Store, Category.Immediate)(implicit context => Seq(Stindb()))
+
+    // simple I/O instruction patterns
+    val in  = Pattern(Category.Input, Category.Immediate)(implicit context => Seq(In()))
+    val out = Pattern(Category.Output, Category.Immediate)(implicit context => Seq(Out()))
+
+    // simple system call instruction pattern
+    val scall = Pattern(Category.EnvironmentCall)(implicit context => Seq(Scall()))
 
     // the read pattern sets the accumulator to a random base address and executes the load with offset
-    val read = Pattern(Category.Load)(implicit c => {
-      val address = c.nextMemoryAddress(Seq())
-      val (base,offset) = randSplit(address)(Unsigned(32),Signed(8))
+    val read = Pattern(Category.Load)(implicit context => {
+      val address = context.nextMemoryAddress(Seq())
+      val (base, offset) = randSplit(address, context.rng)(Unsigned(32), Signed(8))
       Seq(
-        loadi((base & 0xFF)),
-        loadhi(((base >> 8) & 0xFF)),
-        loadh2i(((base >> 16) & 0xFF)),
-        loadh3i(((base >> 24) & 0xFF)),
-        ldaddr(),
-        Instruction.select(ldind(offset), ldindbu(offset))
+        Loadi((base & 0xFF)),
+        Loadhi(((base >> 8) & 0xFF)),
+        Loadh2i(((base >> 16) & 0xFF)),
+        Loadh3i(((base >> 24) & 0xFF)),
+        Ldaddr(),
+        Instruction.select(Ldind(offset), Ldindbu(offset))
       )
     })
 
-    def simulationWrapper(body: InstructionFactory): Pattern = Pattern(implicit c => Seq(body,scall(0)))
-    def simulationWrapper(n: Int): Pattern = Pattern(implicit c => Seq(Instruction.fill(n),scall(0)))
-
     // the write pattern sets the accumulator to a random address and executes the store with offset
-    val write = Pattern(Category.Store)(implicit c => {
-      val address = c.nextMemoryAddress(Seq())
-      val (base,offset) = randSplit(address)(Unsigned(32),Signed(8))
+    val write = Pattern(Category.Store)(implicit context => {
+      val address = context.nextMemoryAddress(Seq())
+      val (base, offset) = randSplit(address, context.rng)(Unsigned(32), Signed(8))
       Seq(
-        loadi((base & 0xFF)),
-        loadhi(((base >> 8) & 0xFF)),
-        loadh2i(((base >> 16) & 0xFF)),
-        loadh3i(((base >> 24) & 0xFF)),
-        ldaddr(),
-        Instruction.select(stind(offset), stindb(offset))
+        Loadi((base & 0xFF)),
+        Loadhi(((base >> 8) & 0xFF)),
+        Loadh2i(((base >> 16) & 0xFF)),
+        Loadh3i(((base >> 24) & 0xFF)),
+        Ldaddr(),
+        Instruction.select(Stind(offset), Stindb(offset))
       )
     })
 
     // the jump and link pattern requests a jump target, sets the accumulator to the target address and executes the jump
-    val jumpAndLink = Pattern(Category.JumpAndLink)(implicit c => {
-      val target = c.nextJumpTarget()
-      Seq(loadLbl(target),loadhLbl(target),jal())
+    val jumpAndLink = Pattern(Category.JumpAndLink)(implicit context => {
+      val target = context.nextJumpTarget()
+      Seq(LoadLbl(target), LoadhLbl(target), Jal())
     })
 
     // branches rely on the generator context to deliver a target label
-    val branch = Pattern(Category.Branch)(implicit c => {
-      val target = c.nextJumpTarget()
-      Seq(
-        Instruction.select(br(target),brz(target),brnz(target),brp(target),brn(target))
-      )
+    val branch = Pattern(Category.Branch)(implicit context => {
+      val target = context.nextJumpTarget()
+      Seq(Instruction.select(Br(target), Brz(target), Brnz(target), Brp(target), Brn(target)))
     })
 
     // leros has full 16-bit address space
@@ -66,364 +102,37 @@ package object leros {
 
     // all instructions
     override val instructions = Seq(
-      add(),
-      addi(),
-      sub(),
-      subi(),
-      shr(),
-      load(),
-      loadi(),
-      and(),
-      andi(),
-      or(),
-      ori(),
-      xor(),
-      xori(),
-      loadhi(),
-      loadh2i(),
-      loadh3i(),
-      store(),
-      out(),
-      in(),
+      // arithmetic instructions
+      add,
+      addi,
+      sub,
+      subi,
+      shr,
+      // logical instructions
+      and,
+      andi,
+      or,
+      ori,
+      xor,
+      xori,
+      // load instructions
+      load,
+      loadi,
+      loadhi,
+      loadh2i,
+      loadh3i,
+      ldaddr,
+      // store instructions
+      store,
+      // I/O instructions
+      in,
+      out,
+      // other instruction patterns
       jumpAndLink,
-      ldaddr(),
       read,
       write,
       branch,
-      scall()
+      scall
     )
-
-
-    case class nop() extends Instruction(Category.Nop) {
-      override def apply(): Instruction = nop()
-
-      override def toAsm = "nop"
-    }
-
-    case class add(rsIn: Option[Register] = None) extends Instruction(
-      Category.Arithmetic
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"add r$rs"
-    }
-
-    case class addi(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Arithmetic, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"addi $imm"
-    }
-
-    case class sub(rsIn: Option[Register] = None) extends Instruction(
-      Category.Arithmetic
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"sub r$rs"
-    }
-
-    case class subi(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Arithmetic, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"subi $imm"
-    }
-
-    case class shr(rsIn: Option[Register] = None) extends Instruction(
-      Category.Arithmetic
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"sra r$rs"
-    }
-
-    case class load(rsIn: Option[Register] = None) extends Instruction(
-      Category.Load
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"load r$rs"
-    }
-
-    case class loadLbl(immIn: Option[LabelRecord] = None) extends Instruction(
-      Category.Load
-    ) {
-      val imm = LabelReference(Signed(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"load <$imm"
-    }
-
-    case class loadhLbl(immIn: Option[LabelRecord] = None) extends Instruction(
-      Category.Load
-    ) {
-      val imm = LabelReference(Signed(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"loadh >$imm"
-    }
-
-    case class loadi(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Load, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"loadi $imm"
-    }
-
-    case class loadhi(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Load, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"loadhi $imm"
-    }
-
-    case class loadh2i(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Load, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"loadh2i $imm"
-    }
-
-    case class loadh3i(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Load, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"loadh3i $imm"
-    }
-
-    case class and(rsIn: Option[Register] = None) extends Instruction(
-      Category.Logical
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"and r$rs"
-    }
-
-    case class andi(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Logical, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"andi $imm"
-    }
-
-    case class or(rsIn: Option[Register] = None) extends Instruction(
-      Category.Logical
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"or r$rs"
-    }
-
-    case class ori(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Logical, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"ori $imm"
-    }
-
-    case class xor(rsIn: Option[Register] = None) extends Instruction(
-      Category.Logical
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"xor r$rs"
-    }
-
-    case class xori(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Logical, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"xori $imm"
-    }
-
-    case class store(rsIn: Option[Register] = None) extends Instruction(
-      Category.Store
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"store r$rs"
-    }
-
-    case class in(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Input, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"in $imm"
-    }
-
-    case class out(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Output, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"out $imm"
-    }
-
-    case class jal(rsIn: Option[Register] = None) extends Instruction(
-      Category.JumpAndLink
-    ) {
-      val rs = Register(QuickAccessMemory)(rsIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"jal r$rs"
-    }
-
-    case class ldaddr() extends Instruction(Category.Load) {
-      override def apply(): Instruction = ldaddr()
-
-      override def toAsm = "ldaddr"
-    }
-
-    case class ldind(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Load, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"ldind $imm"
-    }
-
-    case class ldindbu(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Load, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"ldindbu $imm"
-    }
-
-    case class stind(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Store, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"stind $imm"
-    }
-
-    case class stindb(immIn: Option[BigInt] = None) extends Instruction(
-      Category.Store, Category.Immediate
-    ) {
-      val imm = Constant(Unsigned(8))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"stindb $imm"
-    }
-
-    case class br(immIn: Option[LabelRecord] = None) extends Instruction(
-      Category.Branch, Category.Immediate
-    ) {
-      val imm = LabelReference(Signed(12))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"br $imm"
-    }
-
-    case class brz(immIn: Option[LabelRecord] = None) extends Instruction(
-      Category.Branch
-    ) {
-      val imm = LabelReference(Signed(12))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"brz $imm"
-    }
-
-    case class brnz(immIn: Option[LabelRecord] = None) extends Instruction(
-      Category.Branch
-    ) {
-      val imm = LabelReference(Signed(12))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"brnz $imm"
-    }
-
-    case class brp(immIn: Option[LabelRecord] = None) extends Instruction(
-      Category.Branch
-    ) {
-      val imm = LabelReference(Signed(12))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"brp $imm"
-    }
-
-    case class brn(immIn: Option[LabelRecord] = None) extends Instruction(
-      Category.Branch
-    ) {
-      val imm = LabelReference(Signed(12))(immIn)
-
-      override def apply(): Instruction = copy()
-
-      override def toAsm: String = s"brn $imm"
-    }
-
-    case class scall(immIn: Option[BigInt] = None) extends Instruction(Category.EnvironmentCall) {
-      val imm = Constant(Unsigned(8))(immIn)
-      override def apply(): Instruction = copy()
-
-      override def toAsm = s"scall $imm"
-    }
-
-
   }
-
 }

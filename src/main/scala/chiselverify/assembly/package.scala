@@ -27,7 +27,7 @@ package object assembly {
     }
   }
 
-
+  // @todo evaluate impact of using this one!
   object AssemblyDistributions extends Distributions(scala.util.Random)
 
   /**

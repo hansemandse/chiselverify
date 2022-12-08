@@ -5,7 +5,7 @@ import chiselverify.assembly.RandomHelpers.randomSelect
 object Instruction {
   // chooses one of the passed instructions or patterns at random when a new program is generated
   def select(instructions: InstructionFactory*)(implicit context: GeneratorContext): InstructionFactory = {
-    InstructionFactory(c => randomSelect(instructions).produce())
+    InstructionFactory(c => randomSelect(instructions, c.rng).produce())
   }
 
   // chooses a random instruction or pattern matching the given category when a new program is generated
@@ -38,7 +38,7 @@ abstract class Instruction(val categories: Category*) extends InstructionFactory
   def setAddress(newAddr: BigInt): Unit =
     addr = newAddr
 
-  def apply(): Instruction
+  def apply()(implicit context: GeneratorContext): Instruction
 
   def toAsm: String
 

@@ -12,8 +12,8 @@ class PatternTest extends AnyFlatSpec {
   }
 
   it should "repeat a pattern 3 times" in {
-    val gc = GeneratorContext(Leros,Seq())
-    val seq = Pattern.repeat(3)(Leros.read).produce()(gc)
+    implicit val context = GeneratorContext(Leros, Seq())
+    val seq = Pattern.repeat(3)(Leros.read).produce()
     assert(seq.length == 6*3)
     val mnemonics = seq.map(_.toAsm.split(" ").head)
     assert(getEveryNthItem(0,6)(mnemonics).forall(_ == mnemonics(0)))
@@ -22,5 +22,4 @@ class PatternTest extends AnyFlatSpec {
     assert(getEveryNthItem(3,6)(mnemonics).forall(_ == mnemonics(3)))
     assert(getEveryNthItem(4,6)(mnemonics).forall(_ == mnemonics(4)))
   }
-
 }

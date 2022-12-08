@@ -2,12 +2,10 @@ package chiselverify.assembly.examples
 
 import chiselverify.assembly.RandomHelpers.BigRange
 import chiselverify.assembly.leros.Leros
-import chiselverify.assembly.leros.Leros.{add, in, read, simulationWrapper, write}
+import chiselverify.assembly.leros.Leros.simulationWrapper
 import chiselverify.assembly.{Category, CategoryBlackList, CategoryDistribution, IODistribution, Instruction, Label, MemoryDistribution, Pattern, ProgramGenerator, intToBigIntOption}
 
-
 object LerosExample extends App {
-
   val pg = ProgramGenerator(Leros)(CategoryBlackList(Category.EnvironmentCall))
 
   val program = pg.generate(simulationWrapper(200))
@@ -15,11 +13,12 @@ object LerosExample extends App {
 }
 
 object LerosExamplePatternBased extends App {
+  import chiselverify.assembly.leros.Instructions._
+  import chiselverify.assembly.leros.Leros.{read, write}
 
-  val pattern = Pattern(implicit c => Seq(
-    Label("Hello"), add(), in(20), Instruction.fill(20), Instruction.fillWithCategory(10)(Category.Logical), read, write
+  val pattern = Pattern(implicit context => Seq(
+    Label("Hello"), Add(), In(20), Instruction.fill(20), Instruction.fillWithCategory(10)(Category.Logical), read, write
   ))
-
 
   val pg = ProgramGenerator(Leros)(
     CategoryDistribution(
@@ -41,5 +40,3 @@ object LerosExamplePatternBased extends App {
   val program = pg.generate(simulationWrapper(pattern))
   println(program.pretty)
 }
-
-

@@ -2,7 +2,7 @@ package chiselverify.assembly
 
 import chiselverify.assembly.Label.LabelRecord
 import chiselverify.assembly.RandomHelpers.{rand, randomSelect}
-import chiselverify.assembly.AssemblyDistributions._
+//import chiselverify.assembly.AssemblyDistributions._
 
 import java.io.{File, PrintWriter}
 import scala.collection.mutable.ListBuffer
@@ -16,30 +16,33 @@ import scala.util.Random
   * An instance of a generator context is passed down the function call tree which produces the final instruction sequence
   */
 case class GeneratorContext(
-                             isa: InstructionSet,
-                             nextInstruction: Seq[Constraint] => InstructionFactory with Categorizable,
-                             nextMemoryAddress: Seq[Constraint] => BigInt,
-                             nextIOAddress: Seq[Constraint] => BigInt,
-                             nextJumpTarget: () => LabelRecord,
-                             pc: Counter,
-                             labelCounter: Counter,
-                             jumpTargets: ListBuffer[LabelRecord]
-                           )
+  isa: InstructionSet,
+  nextInstruction: Seq[Constraint] => InstructionFactory with Categorizable,
+  nextMemoryAddress: Seq[Constraint] => BigInt,
+  nextIOAddress: Seq[Constraint] => BigInt,
+  nextJumpTarget: () => LabelRecord,
+  pc: Counter,
+  labelCounter: Counter,
+  jumpTargets: ListBuffer[LabelRecord],
+  rng: Random
+)
 
 object GeneratorContext {
   // a generator context can be defined by an ISA and a set of constraints
   def apply(isa: InstructionSet, constraints: Seq[Constraint]): GeneratorContext ={
     val pc = new Counter
     val targets = new ListBuffer[LabelRecord]()
+    val rng = new Random(0)
     GeneratorContext(
       isa,
-      createInstructionGenerator(isa, constraints),
-      createMemoryAddressGenerator(isa, constraints),
-      createIOAddressGenerator(isa, constraints),
-      createJumpTargetGenerator(pc,targets),
+      createInstructionGenerator(isa, constraints, rng),
+      createMemoryAddressGenerator(isa, constraints, rng),
+      createIOAddressGenerator(isa, constraints, rng),
+      createJumpTargetGenerator(pc, targets, rng),
       pc,
       new Counter,
-      targets
+      targets,
+      rng
     )
   }
 
@@ -47,7 +50,7 @@ object GeneratorContext {
     * The instruction generator gives access to a distribution driven instruction stream.
     * Additional white and black list constraints can be added when sampling.
     */
-  private def createInstructionGenerator(isa: InstructionSet, constraints: Seq[Constraint]): Seq[Constraint] => InstructionFactory with Categorizable = { additionalConstraints =>
+  private def createInstructionGenerator(isa: InstructionSet, constraints: Seq[Constraint], rng: Random): Seq[Constraint] => InstructionFactory with Categorizable = { additionalConstraints =>
     // get all applicable instruction constraints
     val allCons = (constraints ++ additionalConstraints).collect { case x: InstructionConstraint => x }
 
@@ -58,7 +61,7 @@ object GeneratorContext {
       case (cats, _) => cats
     }
 
-    val blacklisted = allCons.collect { case CategoryBlackList(bl@_*) => bl}.flatten
+    val blacklisted = allCons.collect { case CategoryBlackList(bl@_*) => bl }.flatten
 
     // find all distribution constraints
     val distConstraints = allCons.collect { case x: CategoryDistribution => x }.flatMap(_.dis)
@@ -82,41 +85,39 @@ object GeneratorContext {
       discrete(distributionConstraints: _*).sample(1).head
     } else {
       // no distribution was supplied and all allowed instructions are distributed uniformly
-      randomSelect((isa.instructions ++ Seq(Label())).filter(i => i.isOfOneOfCategories(allowedCategories) && !i.isOfOneOfCategories(blacklisted)))
+      randomSelect((isa.instructions ++ Seq(Label())).filter(i => i.isOfOneOfCategories(allowedCategories) && !i.isOfOneOfCategories(blacklisted)), rng)
     }
-
-
   }
 
   /**
     * The memory address generator can be sampled to produce new memory addresses.
     * A distribution can be defined when the sampler is created.
     */
-  private def createMemoryAddressGenerator(isa: InstructionSet, constraints: Seq[Constraint]): Seq[Constraint] => BigInt = { additionalConstraints =>
+  private def createMemoryAddressGenerator(isa: InstructionSet, constraints: Seq[Constraint], rng: Random): Seq[Constraint] => BigInt = { additionalConstraints =>
     val dis = constraints.collect { case x: MemoryDistribution => x }.toList match {
       case x :: _ => x.dis
       case _ => Seq(isa.memoryAddressSpace -> 1.0)
     }
-    discrete(dis.map { case (r, d) => (rand(r), d) }: _*).sample(1).head
+    discrete(dis.map { case (r, d) => (rand(r, rng), d) }: _*).sample(1).head
   }
 
   /**
     * The I/O address generator can be sampled to produce new I/O port addresses.
     * A distribution can be defined when the samples is created.
     */
-  private def createIOAddressGenerator(isa: InstructionSet, constraints: Seq[Constraint]): Seq[Constraint] => BigInt = { additionalConstraints =>
+  private def createIOAddressGenerator(isa: InstructionSet, constraints: Seq[Constraint], rng: Random): Seq[Constraint] => BigInt = { additionalConstraints =>
     val dis = constraints.collect { case x: IODistribution => x }.toList match {
       case x :: _ => x.dis
       case _ => Seq(isa.inputOutputAddressSpace -> 1.0)
     }
-    discrete(dis.map { case (r, d) => (rand(r), d) }: _*).sample(1).head
+    discrete(dis.map { case (r, d) => (rand(r, rng), d) }: _*).sample(1).head
   }
 
   /**
     * The jump target generator produces references to defined symbolic labels in the produced assembly code
     */
-  private def createJumpTargetGenerator(pc: Counter, targets: ListBuffer[LabelRecord]): () => LabelRecord = { () =>
-    if(targets.nonEmpty) randomSelect(targets) else LabelRecord("RANDOM_LABEL_0")
+  private def createJumpTargetGenerator(pc: Counter, targets: ListBuffer[LabelRecord], rng: Random): () => LabelRecord = { () =>
+    if (targets.nonEmpty) randomSelect(targets, rng) else LabelRecord("RANDOM_LABEL_0")
   }
 }
 
@@ -175,24 +176,23 @@ class ProgramGenerator(context: GeneratorContext) {
 
   // generate approximately n instructions using the passed seed
   def generate(n: Int, seed: Long): Program = {
-    Random.setSeed(seed)
+    context.rng.setSeed(seed)
     Program(Seq.fill(n)(context.nextInstruction(Seq()).produce()(context)).flatten, context.isa)
   }
 
   // generate approximately n instructions using a random seed
   def generate(n: Int): Program = {
-    generate(n,Random.nextLong())
+    generate(n, context.rng.nextLong())
   }
 
   // generate an instruction sequence based on a pattern using the passed seed
   def generate(p: Pattern, seed: Long): Program = {
-    Random.setSeed(seed)
+    context.rng.setSeed(seed)
     Program(p.produce()(context), context.isa)
   }
 
   // generate an instruction sequence based on a pattern with a random seed
   def generate(p: Pattern): Program = {
-    generate(p,Random.nextLong())
+    generate(p, context.rng.nextLong())
   }
-
 }

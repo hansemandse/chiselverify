@@ -17,7 +17,7 @@ class WidthViolation extends Exception("Constant out of width bounds")
   * Initializer for a constant. Either outputs a random value in the width range or the passed initializer if defined.
   */
 object Constant {
-  def apply(width: Width)(init: Option[BigInt]): BigInt = {
+  def apply(width: Width)(init: Option[BigInt])(implicit context: GeneratorContext): BigInt = {
     init match {
       case Some(v) =>
         width match {
@@ -25,7 +25,7 @@ object Constant {
           case Unsigned(w) => if (v < 0 || v > pow2(w) - 1) throw new WidthViolation
         }
         v
-      case None => rand(width)
+      case None => rand(width, context.rng)
     }
   }
 }
@@ -35,10 +35,10 @@ object Constant {
   * fitting the bit width is returned
   */
 object LabelReference {
-  def apply(width: Width)(init: Option[LabelRecord]): String = {
+  def apply(width: Width)(init: Option[LabelRecord])(implicit context: GeneratorContext): String = {
     init match {
       case Some(LabelRecord(lbl)) => lbl
-      case None => rand(width).toString()
+      case None => rand(width, context.rng).toString()
     }
   }
 }
@@ -48,11 +48,11 @@ object LabelReference {
   * or, if defined, the initializer is returned.
   */
 object Register {
-  def apply(registerFile: RegisterFile)(init: Option[Register]): BigInt = {
+  def apply(registerFile: RegisterFile)(init: Option[Register])(implicit context: GeneratorContext): BigInt = {
     init match {
       case Some(reg) if !registerFile.registers.contains(reg) => throw new IllegalRegisterInitializer
       case Some(reg) => registerFile.registers.indexOf(reg)
-      case None => rand(BigRange(0, registerFile.registers.length - 1))
+      case None => rand(BigRange(0, registerFile.registers.length - 1), context.rng)
     }
   }
 }

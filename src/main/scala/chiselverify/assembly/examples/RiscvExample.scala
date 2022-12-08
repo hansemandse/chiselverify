@@ -1,3 +1,4 @@
+/*
 package chiselverify.assembly.examples
 
 import chiselverify.assembly.Label.LabelRecord
@@ -66,3 +67,4 @@ object RiscvExample extends App {
   println(loadProgram(s"$buildDir/a.bin").wordBinaries.map(_.toString(16)).mkString("\n"))
 */
 }
+*/

@@ -1,3 +1,4 @@
+/*
 package chiselverify.assembly
 import chiselverify.assembly.Label.LabelRecord
 import chiselverify.assembly.RandomHelpers.{BigRange, pow2, randSplit, randomSelect}
@@ -56,39 +57,39 @@ package object rv32i {
     override val inputOutputAddressSpace: BigRange = BigRange(0, 0)
 
     // the load pattern generates a new address, splits it, sets a register to the base address and the executes the load
-    val load = Pattern(Category.Load)(implicit c => {
-      val (base,offset) = randSplit(c.nextMemoryAddress(Seq()))(Unsigned(32),Signed(12))
-      val reg = randomSelect(rv32i.IntegerRegisterFile.registers)
+    val load = Pattern(Category.Load)(implicit context => {
+      val (base, offset) = randSplit(context.nextMemoryAddress(Seq()), context.rng)(Unsigned(32), Signed(12))
+      val reg = randomSelect(rv32i.IntegerRegisterFile.registers, context.rng)
       Seq(
-        LI(reg,base.toInt),
+        LI(reg, base.toInt),
         Instruction.select(
-          LB(None,reg,offset),
-          LBU(None,reg,offset),
-          LH(None,reg,offset),
-          LHU(None,reg,offset),
-          LW(None,reg,offset)
+          LB(None, reg, offset),
+          LBU(None, reg, offset),
+          LH(None, reg, offset),
+          LHU(None, reg, offset),
+          LW(None, reg, offset)
         )
       )
     })
 
     // the store pattern sets a register to a random address and executes the store with offset
-    val store = Pattern(Category.Store)(implicit c => {
-      val (base,offset) = randSplit(c.nextMemoryAddress(Seq()))(Unsigned(32),Signed(12))
-      val reg = randomSelect(rv32i.IntegerRegisterFile.registers)
+    val store = Pattern(Category.Store)(implicit context => {
+      val (base, offset) = randSplit(context.nextMemoryAddress(Seq()), context.rng)(Unsigned(32),Signed(12))
+      val reg = randomSelect(rv32i.IntegerRegisterFile.registers, context.rng)
       Seq(
-        LI(reg,base.toInt),
+        LI(reg, base.toInt),
         Instruction.select(
-          SB(reg,None,offset),
-          SH(reg,None,offset),
-          SW(reg,None,offset)
+          SB(reg, None, offset),
+          SH(reg, None, offset),
+          SW(reg, None, offset)
         )
       )
     })
 
     // the jump and link pattern requests a jump target, sets the accumulator to the target address and executes the jump
-    val jumpAndLink = Pattern(Category.JumpAndLink)(implicit c => {
-      val target = c.nextJumpTarget()
-      val reg = randomSelect(rv32i.IntegerRegisterFile.registers)
+    val jumpAndLink = Pattern(Category.JumpAndLink)(implicit context => {
+      val target = context.nextJumpTarget()
+      val reg = randomSelect(rv32i.IntegerRegisterFile.registers, context.rng)
       Seq(
         LA(reg,target),
         Instruction.select(JAL(None,target),JALR(None,reg,0))
@@ -96,8 +97,8 @@ package object rv32i {
     })
 
     // branches rely on the generator context to deliver a target label
-    val branch = Pattern(Category.Branch)(implicit c => {
-      val target = c.nextJumpTarget()
+    val branch = Pattern(Category.Branch)(implicit context => {
+      val target = context.nextJumpTarget()
       Seq(
         Instruction.select(
           BEQ(None,None,target),
@@ -786,3 +787,4 @@ package object rv32i {
   }
 
 }
+*/
