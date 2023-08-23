@@ -58,8 +58,6 @@ object Metrics {
 
   /** 
     * Represents an instantaneous Metric
-    * 
-    * @note Inheriting classes must mixin either 
     */
   abstract class Instantaneous(maxVal: Option[Double]) extends Metric {
     this: MetricResult =>

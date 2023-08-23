@@ -4,6 +4,7 @@ import chisel3.Bits
 import chisel3.experimental.DataMirror.{checkTypeEquivalence, directionOf, widthOf}
 import chiseltest._
 import scala.collection.mutable
+import scala.util.{Either, Left, Right}
 
 import chiselverify.approximation.Reporting.{ConstraintReport, Report, TrackerReport}
 import chiselverify.approximation.Metrics.{isAbsolute, HistoryBased, Instantaneous, Metric}
@@ -113,7 +114,10 @@ package object approximation {
     /** 
       * Accesses the internal result storage
       */
-    private[chiselverify] def resultMap: Map[Metric, Any] = _instResults.toMap ++ _histResults.toMap
+    private[chiselverify] def resultMap: Map[Metric, Either[(Int, Double, Double), Double]] = {
+      _instResults.map { case (k, v) => k -> Left [(Int, Double, Double), Double](v) }.toMap ++
+      _histResults.map { case (k, v) => k -> Right[(Int, Double, Double), Double](v) }.toMap
+    }
 
     /** 
       * Samples the approximate port of the watcher and stores its value with a 
@@ -452,14 +456,12 @@ package object approximation {
         val bs = new StringBuilder()
         bs ++= s"Verification results of constraint on port ${portName(approxPort)}\n"
         val satisfieds = metrics.map { mtrc =>
-          val mtrcResults = resultMap(mtrc)
-          val (mtrcSatisfied, mtrcValue) = mtrc match {
-            case _: Instantaneous =>
-              val (_, mtrcMax, _) = mtrcResults.asInstanceOf[(Int, Double, Double)]
+          val (mtrcSatisfied, mtrcValue) = (mtrc, resultMap(mtrc)) match {
+            case (_: Instantaneous, Left((_, mtrcMax, _))) =>
               (mtrc.check(mtrcMax), mtrcMax)
-            case _: HistoryBased =>
-              val mtrcVal = mtrcResults.asInstanceOf[Double]
+            case (_: HistoryBased, Right(mtrcVal)) =>
               (mtrc.check(mtrcVal), mtrcVal)
+            case _ => throw new Exception("mismatched metric and result types")
           }
           if (mtrcSatisfied) {
             bs ++= s"- $mtrc metric is satisfied!\n"

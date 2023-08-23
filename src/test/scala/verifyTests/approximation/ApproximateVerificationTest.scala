@@ -7,17 +7,20 @@ import org.scalatest.matchers.should.Matchers
 
 import chiselverify.approximation._
 import chiselverify.approximation.Metrics._
+import chiselverify.approximation.CompoundMetrics._
 import verifyTests.ToyDUT.{ApproximateBasicToyDUT, ApproximateExactToyDUT}
+
+import scala.util.Random
 
 class ApproximateVerificationTest extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   val Size: Int = 32
+  val rng: Random = new Random(42)
 
   // Extract the name of a port
   def portName(port: Data): String = port.pathName.split('.').last
 
   // Generate some random inputs to the basic DUT and sample its registered outputs
   def simpleRefTest(dut: ApproximateBasicToyDUT, er: ErrorReporter): Unit = {
-    val rng = new scala.util.Random(42)
     val (as, bs) = (Seq.fill(1000){ BigInt(Size, rng) }, Seq.fill(1000){ BigInt(Size, rng) })
     as.zip(bs).foreach { case (a, b) =>
       dut.io.a.poke(a.U)
@@ -29,7 +32,6 @@ class ApproximateVerificationTest extends AnyFlatSpec with ChiselScalatestTester
 
   // Generate some random inputs to the DUT and sample its registered outputs
   def simpleTest(dut: ApproximateExactToyDUT, ers: ErrorReporter*): Unit = {
-    val rng = new scala.util.Random(42)
     val (as, bs) = (Seq.fill(1000){ BigInt(Size, rng) }, Seq.fill(1000){ BigInt(Size, rng) })
     as.zip(bs).foreach { case (a, b) =>
       dut.io.a.poke(a.U)
@@ -43,7 +45,6 @@ class ApproximateVerificationTest extends AnyFlatSpec with ChiselScalatestTester
 
   it should "verify with values" in {
     val ed = ED(0)
-    val rng = new scala.util.Random(42)
     val nums  = Seq.fill(1000) {
       val num = BigInt(Size, rng)
       (num, num)
@@ -53,6 +54,35 @@ class ApproximateVerificationTest extends AnyFlatSpec with ChiselScalatestTester
     zeros.map(ed.check(_)).forall(s => s) should be (true)
     ed.check(nums.head._1, nums.head._2) should be (true)
     ed.check(nums) should be (true)
+  }
+
+  behavior of "CompoundMetric"
+
+  // Generate a random image of dimensions `n` by `m` and pixel dimension `cs`
+  def randomImage(n: Int, m: Int, cs : Int, pixelWidth: Int = 8): Iterable[Iterable[Iterable[BigInt]]] = {
+    (0 until n).map { _ => (0 until m).map { _ =>
+      Iterable.fill(cs) { BigInt(pixelWidth, rng) }
+    }}
+  }
+
+  it should "compute the PSNR properly" in {
+    val psnr = PSNR()
+    for (cs <- Seq(1, 3, 4)) {
+      val rImg = randomImage(144, 176, cs)
+      psnr.compute(rImg, rImg) should equal(Double.PositiveInfinity)
+      val ref = randomImage(144, 176, cs)
+      psnr.compute(rImg, ref) should be < 10.0
+    }
+  }
+
+  it should "compute the SSIM properly" in {
+    val ssim = SSIM()
+    for (cs <- Seq(1, 3, 4)) {
+      val rImg = randomImage(144, 176, cs)
+      ssim.compute(rImg, rImg) should (be >= .999 and be <= 1.001)
+      val ref = randomImage(144, 176, cs)
+      ssim.compute(rImg, ref) should (be >= -.25 and be <= .25)
+    }
   }
 
   behavior of "ErrorReporter"
