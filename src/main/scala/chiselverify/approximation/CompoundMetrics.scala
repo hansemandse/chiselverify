@@ -1,5 +1,7 @@
 package chiselverify.approximation
 
+import scala.math.{Fractional, Integral}
+
 import chiselverify.approximation.Metrics.MSE
 
 /** 
@@ -17,6 +19,62 @@ object CompoundMetrics {
     */
   type Signal = Iterable[BigInt]
   type Image  = Iterable[Iterable[Iterable[BigInt]]]
+
+  /** 
+    * Explicit type conversion of an integral vector into a `BigInt` signal
+    * @param vctr the integral vector
+    * @return the same vector but converted into `BigInt`
+    */
+  def toSignal[T : Integral](vctr: Iterable[T]): Signal = {
+    vctr.map(elem => BigInt(implicitly[Integral[T]].toLong(elem)))
+  }
+
+  /** 
+    * Explicit type conversion of a fractional vector into a `BigInt` signal
+    * @param vctr the fractional vector
+    * @param scale the scale applied to elements in the signal (defaults to 1)
+    * @return the same matrix but converted into `BigInt` through scaling by `scale`
+    */
+  def toSignal[T : Fractional](vctr: Iterable[T], scale: Double = 1.0): Signal = {
+    val (min, max) = (Long.MinValue.toDouble, Long.MaxValue.toDouble)
+    vctr.map { elem =>
+      val prod = implicitly[Fractional[T]].toDouble(elem) * scale
+      assume(min <= prod && prod <= max)
+      BigInt(prod.longValue())
+    }
+  }
+
+  /** 
+    * Explicit type conversion of an integral matrix into a `BigInt` image
+    * @param mtrx the integral matrix
+    * @return the same matrix but converted into `BigInt`
+    */
+  def toImage[T : Integral](mtrx: Iterable[Iterable[Iterable[T]]]): Image = {
+    mtrx.map {
+      _.map {
+        _.map(elem => BigInt(implicitly[Integral[T]].toLong(elem)))
+      }
+    }
+  }
+
+  /** 
+    * Explicit type conversion of a fractional matrix into `BigInt` image
+    * @param mtrx the fractional matrix
+    * @param scale the scale applied to pixels in the image (defaults to 1)
+    * @return the same matrix but converted into `BigInt` through scaling by `scale`
+    */
+  def toImage[T : Fractional](mtrx: Iterable[Iterable[Iterable[T]]], scale: Double = 1.0): Image = {
+    val (min, max) = (Long.MinValue.toDouble, Long.MaxValue.toDouble)
+    mtrx.map {
+      _.map {
+        _.map { elem =>
+          val prod = implicitly[Fractional[T]].toDouble(elem) * scale
+          assume(min <= prod && prod <= max)
+          BigInt(prod.longValue())
+        }
+      }
+    }
+  }
 
   /** 
     * Implicit operations on signals for simplifying code.
