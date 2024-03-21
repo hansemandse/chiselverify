@@ -7,9 +7,8 @@ import chiselverify.approximation.Metrics.MSE
   * It also does not currently distinguish between absolute and relative
   * metrics, per say.
   * 
-  * Beware that the current interface supports samples only in either
-  * `BigInt` or `Double`. All `BigInt`s are converted to `Double` before
-  * any computations are carried out.
+  * Beware that the current interface supports samples only in either `BigInt`s 
+  * that are converted to `Double`s before any computations are carried out.
   */
 object CompoundMetrics {
 
@@ -234,6 +233,9 @@ object CompoundMetrics {
     * Structural similarity metric
     * https://en.wikipedia.org/wiki/Structural_similarity
     * 
+    * Code modeled after the reference Matlab implementation
+    * https://github.com/psychopa4/PFNL/blob/master/matlab/SSIM.m
+    * 
     * @param maxVal [Optional] maximum value of the metric
     * @param pixelWidth [Optional] bit-width of the pixels in the image (defaults to 8)
     */
@@ -248,16 +250,17 @@ object CompoundMetrics {
     private val c2: Double = scala.math.pow(k2 * Max.toDouble, 2.0)
 
     /** 
-      * Generate a Gaussian window of size `n` by `n` with standard deviation 1.5
+      * Generate a Gaussian window of size `n` by `n`
       * 
       * @param n side length of the window
+      * @param std the standard deviation of the Gaussian distribution
+      * @return a 2D matrix with a symmetric Gaussian `n` by `n` window
       * 
       * Follows the definition used in Wang et al [2004]
       * Image Quality Assessment: From Error Visibility to Structural Similarity
       */
-    private def gaussian(n: Int): Iterable[Iterable[Double]] = {
+    private def gaussian(n: Int, std: Double = 1.5): Iterable[Iterable[Double]] = {
       require(n > 0)
-      val std = 1.5
       val denum  = 2 * scala.math.pow(std, 2.0)
       val coords = (0 until n).map(i => i - ((n-1)/2) - (if ((n & 0x1) == 0) 0.5 else 0.0))
       val gauss  = coords.map { x => coords.map { y =>
@@ -292,36 +295,10 @@ object CompoundMetrics {
       * https://observablehq.com/@lemonnish/cross-correlation-of-2-matrices
       */
     private def xcorr(vs1: Iterable[Iterable[Double]],
-                      vs2: Iterable[Iterable[Double]]): Double = {
-      mm(vs1, vs2).flatten.sum
-    }
+                      vs2: Iterable[Iterable[Double]]): Double = mm(vs1, vs2).flatten.sum
 
     /** 
-      * Compute the sample mean of an image
-      * 
-      * @param vs image to compute over
-      * @return the mean of the elements in `vs`
-      */
-    private def mean(vs: Iterable[Iterable[Double]]): Double = {
-      val flat = vs.flatten
-      flat.sum / flat.size
-    }
-
-    /** 
-      * Compute the sample variance of an image
-      * 
-      * @param vs image to compute over
-      * @param meanOpt [Optional] mean of the image values
-      * @return the variance of the elements in `vs`
-      */
-    private def variance(vs: Iterable[Iterable[Double]], meanOpt: Option[Double] = None): Double = {
-      val avg  = meanOpt.getOrElse(mean(vs))
-      val flat = vs.flatten
-      flat.foldLeft(0.0) { case (acc, c) => acc + scala.math.pow(c - avg, 2.0) } / flat.size
-    }
-
-    /** 
-      * Generates windows of size `n` by `n` of an inpute image
+      * Generates windows of size `n` by `n` of an image
       * 
       * @param vs image to generate windows from
       * @param n side length of the windows
@@ -349,8 +326,10 @@ object CompoundMetrics {
     def compute(vs1: Image, vs2: Image): Double = {
       require(vs1.isValid && vs2.isValid, "the images must be valid")
       require(vs1.isCompatibleWith(vs2), "the images must have identical dimensions")
-      // If the image is empty, there is no need to compute anything here
+      assume(c1 > 0 && c2 > 0, "the constants must be greater than zero")
+
       if (vs1.isEmpty || vs2.isEmpty || vs1.head.isEmpty || vs2.head.isEmpty) {
+        // If the image is empty, there is nothing to compute
         1.0
       } else {
         // Check that the color dimensionality is acceptable
@@ -379,19 +358,22 @@ object CompoundMetrics {
 
         // Compute the SSIM score for each pair of windows
         val ssims = vs1Wndws.zip(vs2Wndws).map { case (wndw1, wndw2) =>
-          // Apply the Gaussian to both the windows
-          val gWndw1 = mm(wndw1, gauss)
-          val gWndw2 = mm(wndw2, gauss)
+          // Apply the Gaussian to both the image windows to get their means
+          val mu1 = mm(wndw1, gauss).map(_.sum).sum
+          val mu2 = mm(wndw2, gauss).map(_.sum).sum
 
-          // Compute the elements of the formula
-          val mu1  = mean(gWndw1)
-          val var1 = variance(gWndw1, Some(mu1))
-          val mu2  = mean(gWndw2)
-          val var2 = variance(gWndw2, Some(mu2))
-          val xsigma = xcorr(gWndw1, gWndw2)
+          // Square the means and compute their products
+          val mu1sq  = mu1 * mu1
+          val mu2sq  = mu2 * mu2
+          val mu1mu2 = mu1 * mu2
+
+          // Compute the variance of the images
+          val sigma1sq = mm(mm(wndw1, wndw1), gauss).map(_.sum).sum - mu1sq
+          val sigma2sq = mm(mm(wndw2, wndw2), gauss).map(_.sum).sum - mu2sq
+          val sigma12  = mm(mm(wndw1, wndw2), gauss).map(_.sum).sum - mu1mu2
 
           // Compute the final score
-          ((2 * mu1 * mu2 + c1) * (2 * xsigma + c2)) / ((mu1 * mu1 + mu2 * mu2 + c1) * (var1 + var2 + c2))
+          ((2 * mu1mu2 + c1) * (2 * sigma12 + c2)) / ((mu1sq + mu2sq + c1) * (sigma1sq + sigma2sq + c2))
         }
 
         // Compute and return the mean SSIM score
